@@ -32,6 +32,9 @@ def dataframe_formatter(data):
 
 
 def fetch_symbols():
+    ''' 
+    Different API used for pulling the symbol's 
+    '''
 
     url='https://api.stockanalysis.com/api/screener/a/f?m=marketCap&s=desc&c=no,s,n,marketCap,price,change,revenue&cn=1000&f=exchangeCode-is-TSX,subtype-isnot-etf!cef&i=symbols'
     res=r.get(url)
@@ -45,7 +48,7 @@ def fetch_symbols():
     return symbols
 
 symbols=fetch_symbols()
-symbols=symbols[:20]
+
 
 def fetch_all_data(symbols):
     """
@@ -66,3 +69,9 @@ df_final.to_csv('tsx_data.csv')
 
 symbols=symbols[:10]
 
+def main():
+    pass
+    return None
+
+if __name__ == __main__
+    main()
