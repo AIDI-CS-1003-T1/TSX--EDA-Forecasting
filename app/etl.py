@@ -15,7 +15,9 @@ load_dotenv(dotenv_path=Path('..') / 'utils/.env')
 
 # ------/// API key for Alpha Vantage /// ------ 
 keys = json.loads(os.getenv('keys'))
-current_key = keys['key1']
+key_list = list(keys.keys())
+# Initialize with the first key
+current_key = 0
 
 # ------/// List of symbols to fetch data for /// ------
 def fetch_tsx_data_ts(symbol: str, API_AV: str) -> dict:
@@ -32,16 +34,19 @@ def fetch_tsx_data_ts(symbol: str, API_AV: str) -> dict:
     url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=TSX:{symbol}&outputsize=full&apikey={API_AV}"
     response = r.get(url)
 
-    if 'Error Message' in response.json().keys():
-        raise Exception(f"Request failed with status {response.json().values()} for symbol - {symbol}")
+    if 'Information' in response.json().keys() and current_key >= len(key_list):
+        print(f"API limit reached for key: {API_AV} and no more keys available!")
+        
+    elif 'Information' in response.json().keys():
+        print(f"API limit reached for key: {API_AV}")
+        current_key += 1
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=TSX:{symbol}&outputsize=full&apikey={keys[current_key]}"
+        response = r.get(url)
 
     data = response.json()
     return data
 
-tt=fetch_tsx_data_ts('TD', current_key)
 
-if 'Error Message' in tt.keys():
-    print('Error Message')
 
 def dataframe_formatter(data: dict) -> pd.DataFrame:
     """
@@ -86,9 +91,6 @@ def fetch_all_data(symbols:pd.Series, key:str) -> dict:
         data[symbol] = dataframe_formatter(fetch_tsx_data_ts(symbol,key))
     return data
 
-
-
-
 def fetch_symbols_frame():
     # TODO: log response frame in db for future reference
     # fetch data from stockanalysis API
@@ -96,7 +98,6 @@ def fetch_symbols_frame():
     res=r.get(url)
     data=res.json()
     if 'data' not in data['data'].keys():
-    
         raise Exception(f"Request failed - recheck the API response")
 
 
@@ -117,6 +118,8 @@ def fetch_symbols_frame():
 df_sym=fetch_symbols_frame()
 
 
+# Function to iteratively fetch data from Alpha Vantage API for all symbols
+def iterate_fetch(symbols:str, key:str) -> dict:
 
 
 # overview of tickers 
