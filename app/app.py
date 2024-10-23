@@ -3,7 +3,8 @@ import pandas as pd
 from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
+import perspective
+import dtale
 # ------// Panel App // ------
 
 # TODO: Create a Panel app for EDA on TSX data  
@@ -14,8 +15,14 @@ df=pd.read_csv(Path('..'+'/tsx_data.csv').resolve())
 df.rename(columns={'Unnamed: 0':'Date'}, inplace=True)
 df['Date'] = pd.to_datetime(df['Date'])
 
-df=df[df['Symbol'].str.contains('TD')]
 
+perspective.open_browser()
+
+df.memory_usage(deep=True)/(1024 * 1024)
+
+df=df[df['Symbol'].str.contains('TSX:TD')]
+
+dir(dtale.show(df).open_browser())
 
 fig = go.Figure()
 
@@ -38,26 +45,24 @@ fig.update_layout(
 
 fig.show()
 
-df
+from datetime import datetime, timedelta
 
+# Calculate the date 3 months ago
+three_months_ago = datetime.now() - timedelta(days=90)
 
+# Filter the DataFrame to include only the last 3 months
+df_last_3_months = df[df['Date'] > three_months_ago]
 
-# 1. Candlestick Chart with Volume
-fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                    vertical_spacing=0.03, subplot_titles=('Candlestick', 'Volume'), 
-                    row_width=[0.7, 0.3])
+fig = go.Figure(data=[go.Candlestick(x=df_last_3_months['Date'],
+                open=df_last_3_months['Open'], high=df_last_3_months['High'],
+                low=df_last_3_months['Low'], close=df_last_3_months['Close'],
+                name='Price')])
 
-fig.add_trace(go.Candlestick(x=df['Date'],
-                open=df['Open'], high=df['High'],
-                low=df['Low'], close=df['Close'],
-                name='Price'),
-                row=1, col=1)
-
-fig.add_trace(go.Bar(x=df['Date'], y=df['Volume'], name='Volume'),
-              row=2, col=1)
-
-fig.update_layout(height=600, width=1000, title_text="Candlestick Chart with Volume")
+fig.update_layout(height=600, width=1000, title_text="Candlestick Chart - Last 3 Months")
 fig.show()
+
+pane2=pn.pane.Plotly(fig)
+
 
 # 2. Line Plot for Closing Prices
 fig = go.Figure()
@@ -82,6 +87,8 @@ fig.add_trace(go.Scatter(x=df['Date'], y=df['MA50'], mode='lines', name='50-day 
 fig.add_trace(go.Scatter(x=df['Date'], y=df['MA200'], mode='lines', name='200-day MA'))
 fig.update_layout(title='Closing Price with Moving Averages', xaxis_title='Date', yaxis_title='Price')
 fig.show()
+
+pane1 = pn.pane.Plotly(fig,sizing_mode='stretch_both')
 
 # 5. Relative Strength Index (RSI)
 def compute_rsi(data, time_window):
@@ -127,21 +134,23 @@ fig.show()
 
 
 
-# Close vs. Volume Scatter Plot
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['Open'], y=df['Volume'], mode='markers', name='Close vs. Volume'))
-fig.update_layout(title='Close vs. Volume', xaxis_title='Close Price', yaxis_title='Volume')
-# change size and color of markers
-fig.update_traces(marker=dict(size=4, color='blue'))
-# change   length and width of plot
-fig.update_layout(width=800, height=600)
-fig.show()
+df_pane = pn.pane.Perspective(df, sizing_mode='stretch_both')
 
 
 
+# serve the panel app
+# df_pane = pn.pane.Perspective(df, height='100%', width='100%')
+app = pn.Tabs(('Pane 1', pane1), ('Pane 2', pane2), ('Data', df_pane))
+
+
+app
+
+
+app.show(host='0.0.0.0')
 
 
 
+# ------// Panel App // ------pip install --upgrade pip setuptools wheel
 
 def main():
     pass
@@ -150,3 +159,5 @@ def main():
 if __name__ == "__main__":
     main()
 
+
+    
