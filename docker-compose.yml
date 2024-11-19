@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .  # Build the container from the current directory
+      dockerfile: Dockerfile  # Specify the Dockerfile to use
+    entrypoint: ["python", "app/app.py"]  # Command to run the app
+    ports:
+     - "80:80"  # Map port 8080 on host to port 80 in the container
+    volumes:
+      - .:/app  # Mount the current directory to the /app directory in the container
+    environment:
+      - PYTHONUNBUFFERED=1  # Ensures immediate output without buffering (useful for logs)
+    init: true

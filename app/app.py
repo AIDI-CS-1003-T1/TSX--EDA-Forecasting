@@ -5,20 +5,22 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import perspective
 import dtale
+from flask import Flask
+
+# Create Flask app
+flask_app = Flask(__name__)
+
 # ------// Panel App // ------
 
-# TODO: Create a Panel app for EDA on TSX data  
-#       - use the data inside data/tsx_data.db
-#      - create a line char
-
-df=pd.read_csv(Path('..'+'/tsx_data.csv').resolve())
+# Read and process the data
+df = pd.read_csv(Path('/app/tsx_data.csv').resolve())
 df.rename(columns={'Unnamed: 0':'Date'}, inplace=True)
 df['Date'] = pd.to_datetime(df['Date'])
 
+# Filter data (for example, for a specific stock symbol)
+df = df[df['Symbol'].str.contains('TSX:TD')]
 
-
-
-df=df[df['Symbol'].str.contains('TSX:TD')]
+# Create Plotly figure (Open, High, Low, Close) trace
 fig = go.Figure()
 
 # Add traces for open, high, low, close
@@ -35,63 +37,42 @@ fig.update_layout(
     yaxis=dict(title='Price'),
     yaxis2=dict(title='Volume', overlaying='y', side='right'),
     title='Stock Price and Volume Over Time',
-    xaxis=dict(title='Date'))
+    xaxis=dict(title='Date')
+)
 
+# Calculate the date 3 months ago for filtering
 from datetime import datetime, timedelta
-
-# Calculate the date 3 months ago
 three_months_ago = datetime.now() - timedelta(days=90)
-
-# Filter the DataFrame to include only the last 3 months
 df_last_3_months = df[df['Date'] > three_months_ago]
 
-fig = go.Figure(data=[go.Candlestick(x=df_last_3_months['Date'],
+# Create Candlestick Chart for the last 3 months
+fig_candlestick = go.Figure(data=[go.Candlestick(x=df_last_3_months['Date'],
                 open=df_last_3_months['Open'], high=df_last_3_months['High'],
                 low=df_last_3_months['Low'], close=df_last_3_months['Close'],
                 name='Price')])
 
-fig.update_layout(height=600, width=1000, title_text="Candlestick Chart - Last 3 Months")
+fig_candlestick.update_layout(height=600, width=1000, title_text="Candlestick Chart - Last 3 Months")
+pane2 = pn.pane.Plotly(fig_candlestick)
 
-pane2=pn.pane.Plotly(fig)
+# Line plot for Closing Prices
+fig_line = go.Figure()
+fig_line.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Close Price'))
+fig_line.update_layout(title='Closing Price Over Time', xaxis_title='Date', yaxis_title='Price')
 
-
-# 2. Line Plot for Closing Prices
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Close Price'))
-fig.update_layout(title='Closing Price Over Time', xaxis_title='Date', yaxis_title='Price')
-
-# 3. Area Plot for Price Range
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['Date'], y=df['High'], fill=None, mode='lines', line_color='rgba(0,100,80,0.2)', name='High'))
-fig.add_trace(go.Scatter(x=df['Date'], y=df['Low'], fill='tonexty', mode='lines', line_color='rgba(0,100,80,0.2)', name='Low'))
-fig.update_layout(title='Price Range Over Time', xaxis_title='Date', yaxis_title='Price')
-
-# 4. Moving Averages
+# Moving Averages: 50-day and 200-day
 df['MA50'] = df['Close'].rolling(window=50).mean()
 df['MA200'] = df['Close'].rolling(window=200).mean()
 
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Close Price'))
-fig.add_trace(go.Scatter(x=df['Date'], y=df['MA50'], mode='lines', name='50-day MA'))
-fig.add_trace(go.Scatter(x=df['Date'], y=df['MA200'], mode='lines', name='200-day MA'))
-fig.update_layout(title='Closing Price with Moving Averages', xaxis_title='Date', yaxis_title='Price')
+fig_ma = go.Figure()
+fig_ma.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Close Price'))
+fig_ma.add_trace(go.Scatter(x=df['Date'], y=df['MA50'], mode='lines', name='50-day MA'))
+fig_ma.add_trace(go.Scatter(x=df['Date'], y=df['MA200'], mode='lines', name='200-day MA'))
+fig_ma.update_layout(title='Closing Price with Moving Averages', xaxis_title='Date', yaxis_title='Price')
 
-pane1 = pn.pane.Plotly(fig,sizing_mode='stretch_both')
+pane1 = pn.pane.Plotly(fig_ma, sizing_mode='stretch_both')
 
-# 5. Relative Strength Index (RSI)
+# Compute Relative Strength Index (RSI)
 def compute_rsi(data, time_window):
-    '''
-    Compute the Relative Strength Index (RSI) for a given time window.
-
-    Parameters:
-    data (pd.Series): The time series data.
-    time_window (int): The time window for calculating RSI.
-
-    Returns:
-    pd.Series: The RSI values.
-
-    
-    '''
     diff = data.diff(1).dropna()
     up_chg = 0 * diff
     down_chg = 0 * diff
@@ -105,35 +86,25 @@ def compute_rsi(data, time_window):
 
 df['RSI'] = compute_rsi(df['Close'], 14)
 
-fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                    vertical_spacing=0.03, subplot_titles=('Closing Price', 'RSI'), 
-                    row_width=[0.7, 0.3])
+# RSI with closing price plot
+fig_rsi = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, subplot_titles=('Closing Price', 'RSI'), row_width=[0.7, 0.3])
+fig_rsi.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Close Price'), row=1, col=1)
+fig_rsi.add_trace(go.Scatter(x=df['Date'], y=df['RSI'], mode='lines', name='RSI'), row=2, col=1)
+fig_rsi.update_layout(height=600, width=1000, title_text="Closing Price and RSI")
+fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
 
-fig.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Close Price'),
-              row=1, col=1)
-fig.add_trace(go.Scatter(x=df['Date'], y=df['RSI'], mode='lines', name='RSI'),
-              row=2, col=1)
-
-fig.update_layout(height=600, width=1000, title_text="Closing Price and RSI")
-fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-
-
-
-
+# Create Panel view for the data
 df_pane = pn.pane.Perspective(df, sizing_mode='stretch_both')
 
-
-
-# serve the panel app
-# df_pane = pn.pane.Perspective(df, height='100%', width='100%')
+# Panel tabs
 app = pn.Tabs(('Pane 1', pane1), ('Pane 2', pane2), ('Data', df_pane))
 
+# ------// Flask and Panel integration // ------
+@flask_app.route('/')
+def panel_app():
+    return app.servable()  # This renders the Panel app
 
-
-# ------// Panel App // ------
-def main():
-    app.show()
-
+# Start the Flask app (and serve Panel via Flask)
 if __name__ == "__main__":
-    main()
+    flask_app.run(host='0.0.0.0', port=80)  # Listen on all interfaces for Docker container access
