@@ -7,7 +7,8 @@ services:
       dockerfile: Dockerfile  # Specify the Dockerfile to use
     entrypoint: ["python", "app/app.py"]  # Command to run the app
     ports:
-     - "80:80"  # Map port 8080 on host to port 80 in the container
+      - "80:80"  # Flask
+      - "5006:5006"  # Panel (if served separately)
     volumes:
       - .:/app  # Mount the current directory to the /app directory in the container
     environment:
