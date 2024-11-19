@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .  # Build the container from the current directory
+      dockerfile: Dockerfile  # Specify the Dockerfile to use
+    entrypoint: ["python", "app/app.py"]  # Command to run the app
+    ports:
+      - "80:80"  # Flask
+      - "5006:5006"  # Panel (if served separately)
+    volumes:
+      - .:/app  # Mount the current directory to the /app directory in the container
+    environment:
+      - PYTHONUNBUFFERED=1  # Ensures immediate output without buffering (useful for logs)
+    init: true
