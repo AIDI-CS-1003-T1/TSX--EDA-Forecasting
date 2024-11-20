@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import json
 import sql3
+import dtale
 # env variables TODO: check if this can be added as secrets in gh or render
 load_dotenv(dotenv_path=Path('..') / 'utils/.env')
 
@@ -18,7 +19,6 @@ keys = json.loads(os.getenv('keys'))
 key_list = list(keys.keys())
 
 key_list
-current_key = 0
 
 # ------/// List of symbols to fetch data for /// ------
 def fetch_tsx_data_ts(symbol: str, API_AV: str) -> dict:
@@ -56,14 +56,6 @@ def dataframe_formatter(data: dict) -> pd.DataFrame:
 # ---- /// Handling keys and API calls
 
 
-
-
-
-
-
-
-
-
 def fetch_tickers_tsx():
     """
     Stockanalysis for TSX tickers
@@ -97,14 +89,47 @@ df_sym=fetch_tickers_tsx()
 df_tsx=df_sym[df_sym['exchange']=='TSX']
 df_tsxv=df_sym[df_sym['exchange']=='TSXV']
 
+df_tickers=sql3.db_fetch_as_frame('../data/stocks.db',"select * from tsx_tickers_sa")
+
+df_temp=sql3.db_fetch_as_frame('../data/stocks.db',"select * from tsx_data_temp")
+df_temp
+
+
+df_tickers
+
+
+sql3.list_tables('../data/stocks.db')
+
+sql3.get_table_info('../data/stocks.db','tsx_data_temp')
+
+# fetch tsx_tickers_sa from db
+
+
+
+
+
+
+
+
+
+
+
+existing_symbols = t['Symbol'].str.split(':').str[1].unique().tolist()
+all_symbols = df_tsx['symbol'].unique().tolist()
+
+
+symbol_to_fetch = [x for x in all_symbols if x not in existing_symbols]
+
+len(symbol_to_fetch)
+
+
+
+t=pd.read_csv(Path('..'+'/tsx_data.csv').resolve())
+t['Symbol'].unique().tolist()
 
 # ----/// updating the tickers in the db
 
 sql3
-
-
-# add the df_sym to the db 
-
 
 
 
@@ -114,40 +139,25 @@ pd.read_csv(Path('..'+'/tsx_data.csv').resolve())
 
 
 
+# fetch data from the db
+db_path = "../data/stocks.db"
+conn = sqlite3.connect(db_path)
+query = "SELECT name FROM sqlite_master WHERE type='table';"
+# df = pd.read_sql("SELECT * FROM master_schema", conn)
+
+def run_query(query: str,db_path: str) -> pd.DataFrame:
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
 
 
+s=run_query('select * from tsx_data_temp',db_path)
 
 
 
 
 # -----/// Fetching Data for EDA /// ------
-
-df_sym['symbol'].values
-
-responses=[]
-for index, symb in enumerate(df_sym['symbol'].values):
-    print(index, symb)
-    if index>10:
-        break
-    print(symb,x)
-
-    api_overview=f"https://stockanalysis.com/quote/tsx/{symb}/company/__data.json?x-sveltekit-trailing-slash=1&x-sveltekit-invalidated=001"
-    responses.append(r.get(api_overview).json())
-
-
-responses
-
-# pull out the data and convert it into a table
-def extract_data(response):
-    data=response['data']
-    data['symbol']=response['symbol']
-    return data
-
-
-responses[0].keys()
-
-
-
 
 
 

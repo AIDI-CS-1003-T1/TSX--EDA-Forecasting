@@ -41,15 +41,21 @@ response = r.post(
 
 
 # Send the POST request
-response = r.post(urls, json=data)
+response = r.post(urls, json='')
 response.status_code
 
 response.raise_for_status()
 # discord webhook endpoint
 
-url="https://discord.com/api/webhooks/1298490100736458844/AdBPy6LBJyrrZ6tTkA2sZMsdgZXEbrWudgi6QuTtd7wTJ6plscpWtVBGSqCaFXX8lVFT"
-
+urls="https://discord.com/api/webhooks/1298490100736458844/AdBPy6LBJyrrZ6tTkA2sZMsdgZXEbrWudgi6QuTtd7wTJ6plscpWtVBGSqCaFXX8lVFT"
+r.post(urls,json='test')
 # hit that endpoint with a post request
 
 r.post(whurls)
 
+import requests as r
+
+urls = "https://discord.com/api/webhooks/1298490100736458844/AdBPy6LBJyrrZ6tTkA2sZMsdgZXEbrWudgi6QuTtd7wTJ6plscpWtVBGSqCaFXX8lVFT"
+payload = {"content": "test"}
+
+response = r.post(urls, json=payload)

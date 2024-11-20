@@ -5,6 +5,43 @@ from flask import Flask, render_template_string
 import panel as pn
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import perspective
+import dtale
+# ------// Panel App // ------
+
+# TODO: Change layout of the app with template 
+#       - use the data inside data/tsx_data.db
+#       - check config for dockerization
+#       - SHAP or LIME for model interpretation for LSTM
+#       - ML Flow to monitor the application once deployed
+
+
+df=pd.read_csv(Path('..'+'/tsx_data.csv').resolve())
+df.rename(columns={'Unnamed: 0':'Date'}, inplace=True)
+df['Date'] = pd.to_datetime(df['Date'])
+
+
+
+
+df=df[df['Symbol'].str.contains('TSX:TD')]
+fig = go.Figure()
+
+# Add traces for open, high, low, close
+fig.add_trace(go.Scatter(x=df.index, y=df['Open'], mode='lines', name='Open'))
+fig.add_trace(go.Scatter(x=df.index, y=df['High'], mode='lines', name='High'))
+fig.add_trace(go.Scatter(x=df.index, y=df['Low'], mode='lines', name='Low'))
+fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='Close'))
+
+# Add bar trace for volume on a separate y-axis
+fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='Volume', yaxis='y2'))
+
+# Create a layout with 2 y-axes
+fig.update_layout(
+    yaxis=dict(title='Price'),
+    yaxis2=dict(title='Volume', overlaying='y', side='right'),
+    title='Stock Price and Volume Over Time',
+    xaxis=dict(title='Date'))
+
 from datetime import datetime, timedelta
 
 # Initialize Flask app
