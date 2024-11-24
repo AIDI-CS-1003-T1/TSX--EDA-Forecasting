@@ -16,7 +16,7 @@ import dtale
 #       - ML Flow to monitor the application once deployed
 
 
-df=pd.read_csv(Path('..'+'/tsx_data.csv').resolve())
+df=pd.read_csv(Path('app/tsx_data.csv').resolve())
 df.rename(columns={'Unnamed: 0':'Date'}, inplace=True)
 df['Date'] = pd.to_datetime(df['Date'])
 
