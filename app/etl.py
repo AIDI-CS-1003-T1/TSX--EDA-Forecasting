@@ -13,11 +13,7 @@ import json
 import sql3
 import dtale
 import time
-
 import statsmodels.api 
-
-import django
-
 # env variables 
 
 #TODO: check if this can be added as secrets in gh or render
@@ -92,6 +88,7 @@ keyframe['runcount']=0
 keyframe.info(verbose=True)
 keyframe = keyframe.where(pd.notnull(keyframe), None)
 keyframe
+
 
 sql3.db_create_table(df=keyframe,db_path=db_path,table_name='keyframe',primary_key='key')
 sql3.db_create_table?

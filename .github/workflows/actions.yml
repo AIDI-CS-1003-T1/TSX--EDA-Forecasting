@@ -1,0 +1,29 @@
+name: ETL Cron Job
+
+
+on:
+    schedule:
+        - cron: "*/3 * * * *"
+
+jobs:
+    etl:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v2
+
+            - name: Set up Python
+              uses: actions/setup-python@v2
+              with:
+                  python-version: ${{ file(".python-version") }}
+
+            - name: Install dependencies
+              run: |
+                  pip install -r app/requirements.txt
+                  pip install uvicorn==0.15.0
+
+            - name: Run ETL script
+              env:
+                  ACCESS_KEY: ${{ secrets.discord_webhook }}  # Add other secrets if needed
+              run: python app/wf_test.py
