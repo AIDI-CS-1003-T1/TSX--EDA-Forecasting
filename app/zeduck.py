@@ -26,3 +26,12 @@ def create_table(df:pd.DataFrame, db_path:str,table_name:str):
     con.register(table_name, df)
     con.exe
     con.close()
+
+
+
+df=pd.read_excel("https://github.com/Vimalraj2506/Auto_forecast/raw/refs/heads/main/Data_cleaned.xlsx")
+
+
+dtale.show(df).open_browser()
+
+df['Frame No'].isna().sum()

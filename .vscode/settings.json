@@ -1,0 +1,10 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "tsx",
+            "database": "${workspaceFolder:capstone}/data/stocks.db"
+        }
+    ]
+}
