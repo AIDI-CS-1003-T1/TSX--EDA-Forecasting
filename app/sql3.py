@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 
+
 def db_create_table(df: pd.DataFrame, db_path: str, table_name: str, primary_key: str) -> None:
     """Create a table in a SQLite database from a DataFrame with a specified primary key.
 

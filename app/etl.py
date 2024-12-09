@@ -2,7 +2,7 @@
 # ETL script - Fetching data from Alpha Vantage and Stockanalysis 
 # -----------------------
 import requests as r
-import pandas as pd
+import pandas as pd 
 import sqlite3
 import random
 import re

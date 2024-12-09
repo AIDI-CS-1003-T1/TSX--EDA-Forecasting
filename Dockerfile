@@ -37,9 +37,6 @@ ENV BROWSER_PATH=/usr/bin/chromium
 # Upgrade pip, setuptools, and wheel
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy the tsx_data.csv file from the current directory to /app folder in the container
-COPY tsx_data.csv /app/tsx_data.csv
-
 # Copy the requirements.txt first to optimize Docker layer caching
 COPY requirements.txt /app/
 
@@ -47,11 +44,10 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy the application files into /app
-COPY . /app
+COPY . /app/
 
 # Expose the port the app will run on
-EXPOSE 8080
-Expose 5006
+EXPOSE 5006
 
 # Set the entry point for the application
 CMD ["python", "app/app.py"]

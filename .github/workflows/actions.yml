@@ -26,4 +26,4 @@ jobs:
             - name: Run ETL script
               env:
                   ACCESS_KEY: ${{ secrets.discord_webhook }}  # Add other secrets if needed
-              run: python app/wf_test.py
+              run: python app/etl_cron.py

@@ -11,6 +11,7 @@ services:
       - "5006:5006"  # Panel (if served separately)
     volumes:
       - .:/app  # Mount the current directory to the /app directory in the container
+      - /path/to/data:/app/data
     environment:
       - PYTHONUNBUFFERED=1  # Ensures immediate output without buffering (useful for logs)
     init: true

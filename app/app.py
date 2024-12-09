@@ -5,7 +5,7 @@ from flask import Flask, render_template_string
 import panel as pn
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import perspective
+# import perspective
 import dtale
 from datetime import datetime, timedelta
 import panel as pn
@@ -18,23 +18,37 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import socket
 import sql3
-
+import sqlite3
 
 # ------// Panel App // ------
+
+def db_fetch_as_frame(db_path: str, query: str) -> pd.DataFrame:
+    """
+    Read data from a SQLite database.
+    
+    Args:
+    db_path (str): Path to the SQLite database file
+    table_name (str): Name of the table to be read
+    
+    Returns:
+    pd.DataFrame: DataFrame containing the data from the table
+    """
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
 
 
 # Initialize Flask app
 flask_app = Flask(__name__)
 
 
-db_path='../data/stocks.db'
+db_path = 'stocks.db'
+print(db_path)
+df=db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
 
-
-
-
-df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
 df['Tick']=df['Symbol'].apply(lambda x: x.split('.')[0])
-ticks=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_sa_tickers')
+ticks=db_fetch_as_frame(db_path=db_path,query='select * from tsx_sa_tickers')
 ticks=ticks[['symbol','company','revenue','marketCap']]
 df=df.merge(ticks,how='left',left_on='Tick',right_on='symbol')
 # df.sort_values(by='marketCap',ascending=True,inplace=True)
@@ -44,18 +58,9 @@ df['Date'] = pd.to_datetime(df['Date'])
 df.info()
 
 
-forecast_data=sql3.db_fetch_as_frame(db_path=db_path,query='select * from forecast_results')
+forecast_data=db_fetch_as_frame(db_path=db_path,query='select * from forecast_results')
 forecast_data=forecast_data.merge(ticks[['symbol','company']],how='left',left_on='Tick',right_on='symbol')
 forecast_data['Date']=pd.to_datetime(forecast_data['Date'])
-
-
-
-
-
-
-
-
-
 
 
 
@@ -174,10 +179,10 @@ def create_line_chart(selected_ticker):
     return pn.pane.Plotly(fig, sizing_mode='stretch_both')
 
 # Data Table
-@pn.depends(ticker_selector.param.value)
-def create_data_table(selected_ticker):
-    filtered_df = filter_data(selected_ticker)
-    return pn.pane.Perspective(filtered_df, sizing_mode='stretch_both')
+# @pn.depends(ticker_selector.param.value)
+# def create_data_table(selected_ticker):
+#     filtered_df = filter_data(selected_ticker)
+#     return pn.pane.Perspective(filtered_df, sizing_mode='stretch_both')
 
 def get_market_cap(selected_ticker):
     filtered_df = filter_data(selected_ticker)
@@ -237,15 +242,12 @@ dashboard = pn.Column(
         ('RSI Chart', create_rsi_chart),
         ('Moving Averages', create_moving_averages_chart),
         ('Line Chart', create_line_chart),
-        ('Data Table', create_data_table),
+        # ('Data Table', create_data_table),
          ('Forecast Comparison', plot_forecasts)
     )
 )
 
-# # Serve the dashboard
-# if __name__ == "__main__":
-#     dashboard.show()
-# Flask route to embed Panel as an iframe
+
 @flask_app.route('/')
 def index():
     host=socket.gethostname()
@@ -268,7 +270,12 @@ def index():
 # Run Panel server if this script is run directly
 if __name__ == "__main__":
     # Option 1: Serve Panel as a standalone app
-    pn.serve(dashboard, port=5006, address='localhost', show=False)
-
+    pn.serve(
+    dashboard,
+    port=5006,
+    address='0.0.0.0',
+    allow_websocket_origin=['0.0.0.0:5006', 'localhost:5006'],  
+    show=False
+)
     # # Option 2: Run Flask app (disable this if using Panel standalone)
-    # flask_app.run(host='localhost', port=5006)
+    # flask_app.run(host='0.0.0.0', port=5006)
