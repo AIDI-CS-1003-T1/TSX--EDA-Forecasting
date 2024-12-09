@@ -1,116 +1,137 @@
 import pandas as pd
-from darts import TimeSeries
-from darts.models import RNNModel
-from darts.metrics import mape
-from sklearn.preprocessing import MinMaxScaler
-import pandas as pd
+import sql3
 import numpy as np
-from darts import TimeSeries
-from darts.models import TFTModel, NBEATSModel, AutoARIMA
-from darts.metrics import mape, rmse
-from darts.dataprocessing.transformers import Scaler
-import matplotlib.pyplot as plt
-import darts
-# from darts.models import LSTMModel
-
-
-
-import pandas as pd
-import numpy as np
-from darts import TimeSeries
-from darts.models import AutoARIMA, TFTModel, NBEATSModel
-from darts.metrics import mape, rmse
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error
 from xgboost import XGBRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from xgboost import XGBRegressor
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
 
-# Load the data
-df = pd.read_csv('../tsx_data.csv', parse_dates=['Date'])
-df['Date'] = pd.to_datetime(df['Date'])
-df.set_index('Date', inplace=True)
-df.reset_index(inplace=True)
-data=df
 
-# Extract symbols
-symbols = data['Symbol'].unique()
-results = {}
+db_path='../data/stocks.db'
 
-# Iterate through each symbol
-for symbol in symbols:
-    print(f"Processing symbol: {symbol}")
-    symbol_data = data[data['Symbol'] == symbol]
+df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
+df['Tick']=df['Symbol'].apply(lambda x: x.split('.')[0])
 
-    # Prepare TimeSeries for Darts
-    symbol_data.index=symbol_data['Date']
+tsx=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_sa_tickers')
 
-    symbol_data['Date'].diff()
+tsx.sort_values(by='marketCap',ascending=False,inplace=True)
 
-    ts = TimeSeries.from_dataframe(symbol_data, 'Date', 'Close', fill_missing_dates=True)
+forecast_df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from forecast_results')
 
-    ts_train, ts_val = ts.split_before(0.8)
+all_ticks=data['Tick'].unique().tolist()
+forecasted_ticks=forecast_df['Tick'].unique().tolist()
 
-    # Create temporal features for XGBRegressor
-    symbol_data['day_of_week'] = symbol_data.index.dayofweek
-    symbol_data['month'] = symbol_data.index.month
-    symbol_data['lag_1'] = symbol_data['Close'].shift(1)
-    symbol_data['lag_2'] = symbol_data['Close'].shift(2)
-    symbol_data.dropna(inplace=True)
+pending=list(set(all_ticks)-set(forecasted_ticks))
 
-    symbol_data = symbol_data.asfreq('B', method=None)  # 'B' sets the frequency to business days
-    symbol_data = symbol_data.ffill() 
-    
-    X = symbol_data[['day_of_week', 'month', 'lag_1', 'lag_2']]
-    y = symbol_data['Close']
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, shuffle=False)
 
-    # Scale data
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_val_scaled = scaler.transform(X_val)
+data=df[df['Tick'].isin(pending)]
 
-    # Fit XGBRegressor
-    xgb_model = XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=3)
-    xgb_model.fit(X_train_scaled, y_train)
-    xgb_forecast = xgb_model.predict(X_val_scaled)
 
-    # AutoARIMA Baseline
-    arima_model = AutoARIMA()
-    arima_model.fit(ts_train)
-    arima_forecast = arima_model.predict(len(ts_val))
-    
-    # TFTModel (Tiny Time Mixer)
-    tft_model = TFTModel(input_chunk_length=30, output_chunk_length=30, n_epochs=50)
-    tft_model.fit(ts_train)
-    tft_forecast = tft_model.predict(len(ts_val))
+def calculate_mape(actual, forecast):
+    return np.mean(np.abs((actual - forecast) / actual)) * 100
 
-    # NBEATSModel
-    nbeats_model = NBEATSModel(input_chunk_length=30, output_chunk_length=30, n_epochs=50)
-    nbeats_model.fit(ts_train)
-    nbeats_forecast = nbeats_model.predict(len(ts_val))
+def prepare_data(company_symbol):
+    company_data = data[data['Tick'] == company_symbol].sort_values('Date')
+    company_data['Date'] = pd.to_datetime(company_data['Date'])
+    company_data.set_index('Date', inplace=True)
 
-    # Evaluation Metrics
-    results[symbol] = {
-        "XGBoost": {"MAPE": mape(ts_val.values(), xgb_forecast), "RMSE": rmse(ts_val.values(), xgb_forecast)},
-        "AutoARIMA": {"MAPE": mape(ts_val, arima_forecast), "RMSE": rmse(ts_val, arima_forecast)},
-        "TFT": {"MAPE": mape(ts_val, tft_forecast), "RMSE": rmse(ts_val, tft_forecast)},
-        "NBEATS": {"MAPE": mape(ts_val, nbeats_forecast), "RMSE": rmse(ts_val, nbeats_forecast)},
-    }
+    company_data['Lag_1'] = company_data['Close'].shift(1)
+    company_data['Lag_2'] = company_data['Close'].shift(2)
+    company_data['Lag_3'] = company_data['Close'].shift(3)
+    company_data['Rolling_Mean_5'] = company_data['Close'].rolling(window=5).mean()
+    company_data['Rolling_Std_5'] = company_data['Close'].rolling(window=5).std()
+    company_data['Exp_Moving_Avg_5'] = company_data['Close'].ewm(span=5).mean()
+    company_data.dropna(inplace=True)
 
-    # Visualization
+    X = company_data[['Lag_1', 'Lag_2', 'Lag_3', 'Rolling_Mean_5', 'Rolling_Std_5', 'Exp_Moving_Avg_5']]
+    y = company_data['Close']
+    return train_test_split(X, y, test_size=0.1, shuffle=False), company_data
+
+def forecast_xgb(train, test):
+    xgb = XGBRegressor(
+        n_estimators=200,   
+        learning_rate=0.1,  
+        max_depth=4,  
+        subsample=0.9,   
+        colsample_bytree=0.9  
+    )
+    xgb.fit(train[0], train[1])  
+    forecast = xgb.predict(test[0])  
+    return forecast
+
+def forecast_lstm(train, test):
+    X_train = train[0].values.reshape(-1, 1, train[0].shape[1])
+    y_train = train[1]
+    X_test = test[0].values.reshape(-1, 1, test[0].shape[1])
+
+    model = Sequential()
+    model.add(LSTM(50, activation='relu', input_shape=(1, train[0].shape[1])))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mse')
+
+    model.fit(X_train, y_train, epochs=50, batch_size=16, verbose=0)
+
+    forecast = model.predict(X_test).flatten()
+    return forecast
+
+def plot_forecasts(company_name, actual, xgb_forecast, lstm_forecast, test_index):
     plt.figure(figsize=(12, 6))
-    ts_val.plot(label="Actual", lw=2)
-    plt.plot(ts_val.time_index, xgb_forecast, label="XGBoost", linestyle='--')
-    arima_forecast.plot(label="AutoARIMA")
-    tft_forecast.plot(label="TFT")
-    nbeats_forecast.plot(label="NBEATS")
-    plt.title(f"Forecast vs Actual for {symbol}")
+    plt.plot(test_index, actual, label='Actual', color='black')
+    plt.plot(test_index, xgb_forecast, label='XGB Forecast', linestyle='--', color='blue')
+    plt.plot(test_index, lstm_forecast, label='LSTM Forecast', linestyle='--', color='orange')
+
+    plt.title(f'Forecast Comparison for {company_name}')
+    plt.xlabel('Date')
+    plt.ylabel('Close Price')
     plt.legend()
+    plt.grid()
     plt.show()
 
-# Print Results
-for symbol, metrics in results.items():
-    print(f"Symbol: {symbol}")
-    for model, scores in metrics.items():
-        print(f"  {model} - MAPE: {scores['MAPE']:.2f}, RMSE: {scores['RMSE']:.2f}")
+forecast_results = pd.DataFrame()
+
+companies = data['Tick'].unique()
+
+for company in companies: 
+    (X_train, X_test, y_train, y_test), full_data = prepare_data(company)
+
+    xgb_forecast = forecast_xgb((X_train, y_train), (X_test, y_test))
+
+    print('xgb_forecas_mape',calculate_mape(y_test.values, xgb_forecast))
+    lstm_forecast = forecast_lstm((X_train, y_train), (X_test, y_test))
+
+    xgb_mape = calculate_mape(y_test.values, xgb_forecast)
+    lstm_mape = calculate_mape(y_test.values, lstm_forecast)
+
+    print(f"{company} - XGB MAPE: {xgb_mape:.2f}%, LSTM MAPE: {lstm_mape:.2f}%")
+
+    temp_df = pd.DataFrame({
+        'Tick': company,
+        'Date': y_test.index,
+        'Actual': y_test.values,
+        'XGB_Forecast': xgb_forecast,
+        'LSTM_Forecast': lstm_forecast
+    })
+    forecast_results = pd.concat([forecast_results, temp_df], ignore_index=True)
+
+    plot_forecasts(
+        company,
+        y_test.values, 
+        xgb_forecast,
+        lstm_forecast,
+        y_test.index  
+    )
+
+forecast_results['Date']=forecast_results['Date'].astype('str')
+
+
+# sql3.create_new_table_query(df=forecast_results,db_path=db_path,table_name='forecast_results',primary_keys=['Tick','Date'])
+sql3.db_upsert(df=forecast_results,db_path=db_path,table_name='forecast_results',primary_keys=['Tick','Date'])
+forecast_data=sql3.db_fetch_as_frame(db_path=db_path,query='select * from forecast_results')
+
+# forecast_data.to_csv('../data/forecast_results.csv', index=False)

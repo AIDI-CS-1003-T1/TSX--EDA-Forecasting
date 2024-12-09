@@ -16,11 +16,12 @@ import time
 import statsmodels.api 
 # env variables 
 
-#TODO: check if this can be added as secrets in gh or render
+#TODO: 
+# make changes to the ETL , move to main
+# fix app and darts to load both into the app.py by 6 
+# work on deployment 
 
-
-
-load_dotenv(dotenv_path=Path('..') / 'utils/.env')
+load_dotenv(dotenv_path=Path('..') / 'utilz/.env')
 db_path='../data/stocks.db'
 # ------///  loading secrets 
 keys = json.loads(os.getenv('SECRET_KEYS'))
@@ -78,20 +79,43 @@ def keygen():
     return val
   
 
+keygen()
+
+json.dumps(keys)
+str(keys)
+keys
+json.loads(str(keys))
+# remove keys from keys dict that are None
+
+keys={k:v for k,v in keys.items() if v is not None}
+keys
+last_key_val=''.join(filter(str.isdigit, list(keys.keys())[-1]))
+
+for i in range(int(last_key_val)+1,int(last_key_val)+21):
+    print(i)
+    val=keygen()
+    if val is None:
+        break
+    else:
+        keys[f'key{i}']=keygen()
 
 
-keyframe=pd.DataFrame(data=list(keys.keys()),columns=['key'])
-keyframe['status']=True
-keyframe['fail_count']=0
-keyframe['last_run_dttm']=None
-keyframe['runcount']=0
-keyframe.info(verbose=True)
-keyframe = keyframe.where(pd.notnull(keyframe), None)
-keyframe
 
+
+
+# key_frame=pd.DataFrame.from_dict(keys,orient='index',columns=['key'])
+# key_frame.reset_index(inplace=True)
+# del key_frame['key']
+# key_frame.rename(columns={'index':'key'},inplace=True)
+# key_frame['status']=False
+# key_frame['fail_count']=0
+# key_frame['last_run_dttm']=0
+
+# key_frame
+
+# sql3.db_upsert(df=key_frame,db_path=db_path,table_name='keyframe',primary_keys=['key'])
 
 sql3.db_create_table(df=keyframe,db_path=db_path,table_name='keyframe',primary_key='key')
-sql3.db_create_table?
 
 
 
@@ -100,32 +124,23 @@ CREATE TABLE IF NOT EXISTS keyframe (
     key TEXT PRIMARY KEY,
     status BOOLEAN,
     fail_count INTEGER,
-    last_run_dttm DATETIME,
-    runcount INTEGER
-)"""
+    last_run_dttm DATETIME) """
+
+# drop runcount column from keyframe
+
+sql3.get_table_info(db_path=db_path,table_name='keyframe')
+sql3.list_tables(db_path=db_path)
+
 
 sql3.execute_query(db_path=db_path,query=create_table_query)
 sql3.get_table_info(db_path=db_path,table_name='keyframe')
 
 # insert data
+sql3.db_fetch_as_frame(db_path=db_path,query='select * from keyframe')
 sql3.db_upsert(df=keyframe,db_path=db_path,table_name='keyframe',primary_keys=['key'])
 
-sql3.db_fetch_as_frame(db_path=db_path,query='select * from keyframe')
 
 
-
-
-droptable_query='drop table if exists keyframe'
-sql3.execute_query(db_path='../data/stocks.db',query=droptable_query)
-sql3.get_table_info(db_path=db_path,table_name='keyframe')
-sql3.list_tables(db_path=db_path)
-
-
-
-sql3.db_upsert(df=keyframe,db_path='../data/stocks.db',table_name='keyframe',primary_keys=['key'])
-sql3.get_table_info(db_path='../data/stocks.db',table_name='keyframe')
-t=sql3.db_fetch_as_frame(db_path='../data/stocks.db',query='select * from keyframe')
-sql3.db_create_table(df=keyframe,db_path='../data/stocks.db',table_name='keyframe')
 
 
 
@@ -143,16 +158,16 @@ def fetch_tsx_data_ts(symbol: str, vantage_key: str) -> dict:
 
     Args:
         symbol (str): The symbol of the stock to fetch data for.
-        API_AV (str): The API key for Alpha Vantage.
+        vantage_key (str): The API key for Alpha Vantage.
 
     Returns:
         dict: A dictionary containing the stock data.
     """
-
-
+    session = r.Session()
     url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}.TRT&outputsize=full&apikey={vantage_key}"
-    response = r.get(url)
+    response = session.get(url)
     data = response.json()
+    session.close()
     return data
 
 """
@@ -177,11 +192,6 @@ def fetch_tsxv_data_ts(symbol: str, vantage_key: str) -> dict:
     return data
 
 
-
-
-
-fetch_tsx_data_ts(symbol='TD',vantage_key=keys['key2'])
-
 def dataframe_formatter(data: dict) -> pd.DataFrame:
 
     df = pd.DataFrame(data['Time Series (Daily)']).T
@@ -192,12 +202,11 @@ def dataframe_formatter(data: dict) -> pd.DataFrame:
                         '3. low': 'Low',
                         '4. close': 'Close',
                         '5. volume': 'Volume'}, inplace=True)
+    df.reset_index(inplace=True)
+    df.rename(columns={'index': 'Date'}, inplace=True)
+    df['Date'] = df['Date'].astype(str)
+
     return df
-
-
-# ---- /// Handling keys and API calls
-
-
 
 
 
@@ -229,75 +238,138 @@ def fetch_tickers_tsx():
 df_sym=fetch_tickers_tsx()
 df_sym.reset_index(drop=True,inplace=True)
 
+
 df_tsx=df_sym[df_sym['exchange']=='TSX']
 df_tsxv=df_sym[df_sym['exchange']=='TSXV']
+df_tsxv.reset_index(drop=True,inplace=True)
 
 
 
-dtale.show(df_sym).open_browser()
 
-df_sym
+# create 2 tables for TSX and TSXV
+sql3.db_create_table(df=df_tsx,db_path=db_path,table_name='tsx_sa_tickers',primary_key='symbol')
+sql3.db_create_table(df=df_tsxv,db_path=db_path,table_name='tsxv_sa_tickers',primary_key='symbol')
 
-for i in df_tsx['symbol']:print(i)
+sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_sa_tickers')
 
 
 
+# running etl job for tsx first
 
 
+tsx_df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_sa_tickers')
+tsx_df.sort_values(by='marketCap',ascending=False,inplace=True)
+tsx_df['symbol'].value_counts().reset_index()
 
 
+key_frame=sql3.db_fetch_as_frame(db_path=db_path,query='select * from keyframe')
 
+key_frame
 
 
+tsx_data=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
 
+print(tsx_data['Symbol'].nunique())
+tsx_data
+# split Symbol column in tsx_data into 2 columns . 1 for TSX and 1 for TSXV
 
+tsx_data['tick']=[x.split('.')[0] for x in tsx_data['Symbol']]
+tsx_data['exhcange']=[x.split('.')[1] for x in tsx_data['Symbol']]
 
+tsx_data.to_csv('../tsx_data.csv',index=False)
 
 
 
+# pending_stocks
+existing=list(tsx_data['Symbol'].unique())
+existing=[x.split('.')[0] for x in existing]
+len(existing)
+all_stocks=list(tsx_df['symbol'])
+# all_stocks=[x]
+all_stocks.index('STLR')
+pending=list(set(all_stocks)-set(existing))
+pending
+pending
+len(pending)
 
+i='GRT.UN:TOR'
 
+# data=fetch_tsx_data_ts(symbol='GRT-UN',vantage_key=keys['key111'])
 
+def tsx_data_etl():
+    key_val=180
+    data={}
+    while len(pending)>0 and key_val<len(keys):
+        if '.' in pending[0]:
+            pending.remove(pending[0])
+            continue
+            
+        time.sleep(.1)
+        current_key=key_frame['key'][key_val]
+        key=keys[current_key]
+        print(pending[0],key,key_val,key_frame['key'][key_val])
+        data=fetch_tsx_data_ts(symbol=pending[0],vantage_key=key)
+        print(data.keys())
 
 
+        
+        if 'Time Series (Daily)' in data.keys():
+            df=dataframe_formatter(data)
+            print(f'upserting to db {pending[0]}')
 
+            sql3.db_upsert(df=df,db_path=db_path,table_name='tsx_data',primary_keys=['Date','Symbol'])
+            pending.remove(pending[0])
 
+        elif 'Error Message' in data.keys():
+            print(f'ticker {pending[0]} not found, switching to next tick')
+            pending.remove(pending[0])
 
 
+        elif 'Information' in data.keys():
+            print(f'limit reached unknown reason,breaking out of loop')
+            break   
+            pending.remove(pending[0])
+            key_val+=1  
+            
 
+tsx_data_etl()
 
 
 
 
+            
 
 
 
 
-# upsert check 
-sql3.db_upsert(df= df_sym, db_path='../data/stocks.db', table_name='tsx_tickers_sa', primary_keys=['sym'])
-df_tickers=sql3.db_fetch_as_frame('../data/stocks.db',"select * from tsx_tickers_sa")
-df_temp=sql3.db_fetch_as_frame('../data/stocks.db',"select * from tsx_data_temp")
 
 
 
 
-df_tickers['exchange'].value_counts()
 
-sql3.list_tables('../data/stocks.db')
+data=fetch_tsx_data_ts(symbol='RY',vantage_key=keys['key10'])
+df=dataframe_formatter(data)
+df.reset_index(inplace=True)
+df.rename(columns={'index':'Date'},inplace=True)
+df['Date']= df['Date'].astype('str')
+# sql3.create_new_table_query(df=df,db_path=db_path,table_name='tsx_data',primary_keys=['Date','Symbol'])
+# sql3.db_upsert(df=df,db_path=db_path,table_name='tsx_data',primary_keys=['Date','Symbol'])
 
-sql3.get_table_info('../data/stocks.db','tsx_data_temp')
+dataframe_formatter(data)
 
 
+tsx_data_etl()
 
-for i in df_tickers['sym']: print(i)
 
-tsx_quote=f'https://stockanalysis.com/quote/tsx/{tick}/financials/__data.json?'
-tsxv_quote =f"https://stockanalysis.com/quote/tsxv/{tick}/financials/__data.json"
+df=pd.read_csv('../tsx_data.csv')
 
+df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
 
+df[['Date','Symbol']].drop_duplicates()
 
+df['Symbol'].value_counts(dropna=False).sort_index().reset_index()
 
-# ------ /// ETL for stockanalysis - TSX & TSXV - Overview & Metrics /// ------
+df[~df['Date'].isna()]
 
 
 
@@ -311,7 +383,42 @@ tsxv_quote =f"https://stockanalysis.com/quote/tsxv/{tick}/financials/__data.json
 
 
 
+table_name='tsx_data'
+# list all tables
+sql3.list_tables(db_path=db_path)
 
+
+# list all columns in table
+sql3.get_table_info(db_path=db_path,table_name=table_name)
+
+sql3.db_upsert(df=stock_data,db_path=db_path,table_name='tsx_data',primary_keys=['Date','Symbol'])
+
+sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
+
+
+
+#---- /// all queries ///----
+
+query="""
+Drop table if exists keyframe;
+
+"""
+
+
+sql3.execute_query(db_path=db_path,query=query)
+
+df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_tickers_sa_temp')
+df
+
+
+tsx_df['Date'].max()
+
+
+
+
+fetch_tsx_data_ts(symbol='TD',vantage_key=keys['key2'])
+
+fetch_tsxv_data_ts(symbol=df_tsxv['symbol'].loc[0],vantage_key=keys['key2'])
 
 
 

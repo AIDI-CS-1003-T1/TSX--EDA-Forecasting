@@ -16,30 +16,52 @@ from plotly.subplots import make_subplots
 from statsmodels.graphics.tsaplots import plot_acf
 import matplotlib.pyplot as plt
 from datetime import datetime
+import socket
+import sql3
+
 
 # ------// Panel App // ------
 
-# TODO: Change layout of the app with template 
-#       - use the data inside data/tsx_data.db
-#       - check config for dockerization
-#       - SHAP or LIME for model interpretation for LSTM
-#       - ML Flow to monitor the application once deployed
 
 # Initialize Flask app
 flask_app = Flask(__name__)
 
 
+db_path='../data/stocks.db'
 
 
 
+
+df=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_data')
+df['Tick']=df['Symbol'].apply(lambda x: x.split('.')[0])
+ticks=sql3.db_fetch_as_frame(db_path=db_path,query='select * from tsx_sa_tickers')
+ticks=ticks[['symbol','company','revenue','marketCap']]
+df=df.merge(ticks,how='left',left_on='Tick',right_on='symbol')
+# df.sort_values(by='marketCap',ascending=True,inplace=True)
 # Load and preprocess data
-df = pd.read_csv(Path('..' + '/tsx_data.csv').resolve())
-df.rename(columns={'Unnamed: 0': 'Date'}, inplace=True)
+# df = pd.read_csv(Path('..' + '/tsx_data.csv').resolve())
 df['Date'] = pd.to_datetime(df['Date'])
+df.info()
+
+
+forecast_data=sql3.db_fetch_as_frame(db_path=db_path,query='select * from forecast_results')
+forecast_data=forecast_data.merge(ticks[['symbol','company']],how='left',left_on='Tick',right_on='symbol')
+forecast_data['Date']=pd.to_datetime(forecast_data['Date'])
+
+
+
+
+
+
+
+
+
+
+
 
 # Global ticker selector
-tickers = df['Symbol'].unique().tolist()
-ticker_selector = pn.widgets.Select(name='Select Ticker', options=tickers, value=tickers[0])
+tickers = df['company'].unique().tolist()
+ticker_selector = pn.widgets.Select(name='Select Company', options=tickers, value=tickers[0])
 
 # Time range toggle buttons for candlestick chart
 time_range_toggle = pn.widgets.ToggleGroup(
@@ -52,7 +74,7 @@ time_range_toggle = pn.widgets.ToggleGroup(
 
 # Function to filter data by selected ticker
 def filter_data(selected_ticker):
-    return df[df['Symbol'] == selected_ticker]
+    return df[df['company'] == selected_ticker]
 
 # Function to filter data by selected time range for candlestick chart
 @pn.depends(ticker_selector.param.value, time_range_toggle.param.value)
@@ -157,11 +179,58 @@ def create_data_table(selected_ticker):
     filtered_df = filter_data(selected_ticker)
     return pn.pane.Perspective(filtered_df, sizing_mode='stretch_both')
 
+def get_market_cap(selected_ticker):
+    filtered_df = filter_data(selected_ticker)
+    market_cap = filtered_df['marketCap'].iloc[-1]
+    return f"MarketCap: ${int(market_cap):,}"
+
+# Display Revenue with proper binding
+@pn.depends(ticker_selector.param.value)
+def get_revenue(selected_ticker):
+    filtered_df = filter_data(selected_ticker)
+    revenue = filtered_df['revenue'].iloc[-1]
+    return f"Revenue: ${int(revenue):,}"
+
+
+# add one more tab using 
+
+
+@pn.depends(ticker_selector.param.value)
+def plot_forecasts(selected_ticker):
+    company_name = selected_ticker
+    data = forecast_data[forecast_data['company'] == company_name]
+    actual = data['Actual']
+    xgb_forecast = data['XGB_Forecast']
+    lstm_forecast = data['LSTM_Forecast']
+    test_index = data['Date']
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(x=test_index, y=actual, mode='lines', name='Actual', line=dict(color='black')))
+    fig.add_trace(go.Scatter(x=test_index, y=xgb_forecast, mode='lines', name='XGB Forecast', line=dict(dash='dash', color='blue')))
+    fig.add_trace(go.Scatter(x=test_index, y=lstm_forecast, mode='lines', name='LSTM Forecast', line=dict(dash='dash', color='orange')))
+
+    fig.update_layout(
+        title=f'Forecast Comparison for {company_name}',
+        xaxis_title='Date',
+        yaxis_title='Close Price',
+        legend_title='Legend',
+        template='plotly_white'
+    )
+
+    return pn.pane.Plotly(fig, sizing_mode='stretch_both')
+
+
+
+
+
 # Full dashboard layout
 dashboard = pn.Column(
-    pn.Row(
+   pn.Row(
         pn.pane.Markdown("<h1>Stock Data Analysis</h1>", align="start"),
-        ticker_selector
+        ticker_selector,
+        # pn.bind(lambda cap: pn.pane.Markdown(f"<h3>{cap}</h3>", align="start"), get_market_cap),
+        # pn.bind(lambda rev: pn.pane.Markdown(f"<h3>{rev}</h3>", align="start"), get_revenue)
     ),
     pn.Tabs(
         ('Candlestick Chart', pn.Column(time_range_toggle, create_candlestick_chart)),
@@ -169,6 +238,7 @@ dashboard = pn.Column(
         ('Moving Averages', create_moving_averages_chart),
         ('Line Chart', create_line_chart),
         ('Data Table', create_data_table),
+         ('Forecast Comparison', plot_forecasts)
     )
 )
 
@@ -178,7 +248,9 @@ dashboard = pn.Column(
 # Flask route to embed Panel as an iframe
 @flask_app.route('/')
 def index():
-    panel_url = "http://localhost:5006"  # Adjust if using a different host/port
+    host=socket.gethostname()
+    ip=socket.gethostbyname(host)
+    panel_url = f"http://{ip}:5006" 
     return render_template_string(
         f"""
         <!DOCTYPE html>
@@ -198,5 +270,5 @@ if __name__ == "__main__":
     # Option 1: Serve Panel as a standalone app
     pn.serve(dashboard, port=5006, address='localhost', show=False)
 
-    # Option 2: Run Flask app (disable this if using Panel standalone)
-    flask_app.run(host='localhost', port=5006)
+    # # Option 2: Run Flask app (disable this if using Panel standalone)
+    # flask_app.run(host='localhost', port=5006)

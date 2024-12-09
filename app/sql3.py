@@ -116,6 +116,30 @@ def get_table_info(db_path, table_name):
     return {'columns': columns, 'primary_key': primary_key}
 
 
+
+
+def create_new_table_query(df, db_path, table_name, primary_keys):
+    import sqlite3
+
+    # Generate the SQL for creating the table
+    columns = ', '.join([f"{col} {dtype}" for col, dtype in zip(df.columns, df.dtypes)])
+    primary_keys_str = ', '.join(primary_keys)
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS {table_name} (
+        {columns},
+        PRIMARY KEY ({primary_keys_str})
+    );
+    """
+
+    # Execute the SQL
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(create_table_sql)
+    conn.commit()
+    conn.close()
+
+
+
 def execute_query(db_path, query):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
