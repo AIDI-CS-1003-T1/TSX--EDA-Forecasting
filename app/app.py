@@ -14,6 +14,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from statsmodels.graphics.tsaplots import plot_acf
+# from darts_test import forecast_arima
 import matplotlib.pyplot as plt
 from datetime import datetime
 import socket
@@ -207,6 +208,7 @@ def plot_forecasts(selected_ticker):
     actual = data['Actual']
     xgb_forecast = data['XGB_Forecast']
     lstm_forecast = data['LSTM_Forecast']
+    arima_forecast = data['ARIMA_Forecast']  
     test_index = data['Date']
 
     fig = go.Figure()
@@ -214,6 +216,7 @@ def plot_forecasts(selected_ticker):
     fig.add_trace(go.Scatter(x=test_index, y=actual, mode='lines', name='Actual', line=dict(color='black')))
     fig.add_trace(go.Scatter(x=test_index, y=xgb_forecast, mode='lines', name='XGB Forecast', line=dict(dash='dash', color='blue')))
     fig.add_trace(go.Scatter(x=test_index, y=lstm_forecast, mode='lines', name='LSTM Forecast', line=dict(dash='dash', color='orange')))
+    fig.add_trace(go.Scatter(x=test_index, y=arima_forecast, mode='lines', name='ARIMA Forecast', line=dict(dash='dash', color='red')))
 
     fig.update_layout(
         title=f'Forecast Comparison for {company_name}',
