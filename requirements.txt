@@ -9,3 +9,7 @@ dash>=1.21.0
 numpy>=1.21.0
 tensorflow>=2.0.0
 xgboost>=1.7.6  # Add this line for XGBoost
+kaleido==0.2.1
+dash==2.9.3  # Specify exact version
+dash-core-components==2.0.0
+dash-html-components==2.0.0

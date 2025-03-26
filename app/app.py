@@ -6,7 +6,7 @@ import panel as pn
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 # import perspective
-import dtale
+# import dtale
 from datetime import datetime, timedelta
 import panel as pn
 import pandas as pd
@@ -59,7 +59,14 @@ df['Date'] = pd.to_datetime(df['Date'])
 df.info()
 
 
+
+# ----- // forecast fetching // -----
 forecast_data=db_fetch_as_frame(db_path=db_path,query='select * from forecast_results')
+
+forecast_data.head(5)
+
+print(forecast_data.columns)
+
 forecast_data=forecast_data.merge(ticks[['symbol','company']],how='left',left_on='Tick',right_on='symbol')
 forecast_data['Date']=pd.to_datetime(forecast_data['Date'])
 
@@ -179,11 +186,6 @@ def create_line_chart(selected_ticker):
     fig.update_layout(title=f'Stock Prices Over Time - {selected_ticker}', xaxis_title='Date', yaxis_title='Price')
     return pn.pane.Plotly(fig, sizing_mode='stretch_both')
 
-# Data Table
-# @pn.depends(ticker_selector.param.value)
-# def create_data_table(selected_ticker):
-#     filtered_df = filter_data(selected_ticker)
-#     return pn.pane.Perspective(filtered_df, sizing_mode='stretch_both')
 
 def get_market_cap(selected_ticker):
     filtered_df = filter_data(selected_ticker)
@@ -200,23 +202,102 @@ def get_revenue(selected_ticker):
 
 # add one more tab using 
 
+# ------ old plot for forecast
+# @pn.depends(ticker_selector.param.value)
+# def plot_forecasts(selected_ticker):
+#     company_name = selected_ticker
+#     data = forecast_data[forecast_data['company'] == company_name]
+#     actual = data['Actual']
+#     xgb_forecast = data['XGB_Forecast']
+#     lstm_forecast = data['LSTM_Forecast']
+#     arima_forecast = data['ARIMA_Forecast']  
+#     test_index = data['Date']
+
+#     fig = go.Figure()
+
+#     fig.add_trace(go.Scatter(x=test_index, y=actual, mode='lines', name='Actual', line=dict(color='black')))
+#     fig.add_trace(go.Scatter(x=test_index, y=xgb_forecast, mode='lines', name='XGB Forecast', line=dict(dash='dash', color='blue')))
+#     fig.add_trace(go.Scatter(x=test_index, y=lstm_forecast, mode='lines', name='LSTM Forecast', line=dict(dash='dash', color='orange')))
+#     fig.add_trace(go.Scatter(x=test_index, y=arima_forecast, mode='lines', name='ARIMA Forecast', line=dict(dash='dash', color='red')))
+
+#     fig.update_layout(
+#         title=f'Forecast Comparison for {company_name}',
+#         xaxis_title='Date',
+#         yaxis_title='Close Price',
+#         legend_title='Legend',
+#         template='plotly_white'
+#     )
+
+#     return pn.pane.Plotly(fig, sizing_mode='stretch_both')
 
 @pn.depends(ticker_selector.param.value)
 def plot_forecasts(selected_ticker):
     company_name = selected_ticker
-    data = forecast_data[forecast_data['company'] == company_name]
-    actual = data['Actual']
-    xgb_forecast = data['XGB_Forecast']
-    lstm_forecast = data['LSTM_Forecast']
-    arima_forecast = data['ARIMA_Forecast']  
-    test_index = data['Date']
-
+    # Debug prints to check data
+    print(f"Selected company: {company_name}")
+    print(f"All columns in forecast_data: {forecast_data.columns.tolist()}")
+    
+    # Filter data for selected company
+    data = forecast_data[forecast_data['company'] == company_name].copy()
+    print(f"Number of rows for {company_name}: {len(data)}")
+    print(f"Columns in filtered data: {data.columns.tolist()}")
+    
+    # Check if data exists
+    if len(data) == 0:
+        return pn.pane.Markdown("No forecast data available for this company")
+    
+    # Print sample of data to verify values
+    print("\nFirst few rows of forecasts:")
+    print(data[['Date', 'Actual', 'XGB_Forecast', 'LSTM_Forecast', 'ARIMA_Forecast']].head())
+    
     fig = go.Figure()
-
-    fig.add_trace(go.Scatter(x=test_index, y=actual, mode='lines', name='Actual', line=dict(color='black')))
-    fig.add_trace(go.Scatter(x=test_index, y=xgb_forecast, mode='lines', name='XGB Forecast', line=dict(dash='dash', color='blue')))
-    fig.add_trace(go.Scatter(x=test_index, y=lstm_forecast, mode='lines', name='LSTM Forecast', line=dict(dash='dash', color='orange')))
-    fig.add_trace(go.Scatter(x=test_index, y=arima_forecast, mode='lines', name='ARIMA Forecast', line=dict(dash='dash', color='red')))
+    
+    # Add traces with error handling
+    try:
+        # Add actual data
+        fig.add_trace(go.Scatter(
+            x=data['Date'], 
+            y=data['Actual'], 
+            mode='lines', 
+            name='Actual', 
+            line=dict(color='black')
+        ))
+        
+        # Add XGB forecast
+        fig.add_trace(go.Scatter(
+            x=data['Date'], 
+            y=data['XGB_Forecast'], 
+            mode='lines', 
+            name='XGB Forecast', 
+            line=dict(dash='dash', color='blue')
+        ))
+        
+        # Add LSTM forecast
+        fig.add_trace(go.Scatter(
+            x=data['Date'], 
+            y=data['LSTM_Forecast'], 
+            mode='lines', 
+            name='LSTM Forecast', 
+            line=dict(dash='dash', color='orange')
+        ))
+        
+        # Add ARIMA forecast with explicit error handling
+        if 'ARIMA_Forecast' in data.columns:
+            print("\nARIMA Forecast values:")
+            print(data['ARIMA_Forecast'].head())
+            fig.add_trace(go.Scatter(
+                x=data['Date'], 
+                y=data['ARIMA_Forecast'], 
+                mode='lines', 
+                name='ARIMA Forecast', 
+                line=dict(dash='dash', color='red')
+            ))
+        else:
+            print("\nARIMA_Forecast column not found in data")
+            
+    except Exception as e:
+        print(f"Error adding traces: {str(e)}")
+        return pn.pane.Markdown(f"Error creating forecast plot: {str(e)}")
 
     fig.update_layout(
         title=f'Forecast Comparison for {company_name}',
@@ -228,9 +309,7 @@ def plot_forecasts(selected_ticker):
 
     return pn.pane.Plotly(fig, sizing_mode='stretch_both')
 
-
-
-
+forecast_data.columns
 
 # Full dashboard layout
 dashboard = pn.Column(
@@ -255,7 +334,7 @@ dashboard = pn.Column(
 def index():
     host=socket.gethostname()
     ip=socket.gethostbyname(host)
-    panel_url = f"http://{ip}:5006" 
+    panel_url = f"http://{ip}:5001" 
     return render_template_string(
         f"""
         <!DOCTYPE html>
@@ -275,9 +354,9 @@ if __name__ == "__main__":
     # Option 1: Serve Panel as a standalone app
     pn.serve(
     dashboard,
-    port=5006,
+    port=5001,
     address='0.0.0.0',
-    allow_websocket_origin=['0.0.0.0:5006', 'localhost:5006'],  
+    allow_websocket_origin=['0.0.0.0:5001', 'localhost:5001'],  
     show=False
 )
     # # Option 2: Run Flask app (disable this if using Panel standalone)

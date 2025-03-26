@@ -1,0 +1,22 @@
+[project]
+name = "capstone"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "keras>=2.14.0",
+    "matplotlib>=3.10.1",
+    "pandas>=2.2.3",
+    "pip>=25.0.1",
+    "scikit-learn>=1.6.1",
+    "tensorflow-macos>=2.14.1",
+    "tensorflow>=2.14.0",
+    "xgboost>=3.0.0",
+    "darts>=0.34.0",
+    "flask>=3.1.0",
+    "panel>=1.6.1",
+    "watchfiles>=1.0.4",
+    "plotly>=6.0.1",
+]

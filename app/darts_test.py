@@ -11,12 +11,20 @@ from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from keras.models import Sequential
 from keras.layers import LSTM, Dense
-from darts.models import ARIMA
 from statsmodels.tsa.arima.model import ARIMA
 from darts import TimeSeries
+from sklearn.metrics import mean_absolute_percentage_error
+import warnings
+warnings.filterwarnings("ignore")
+# Set display options
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.float_format', lambda x: '%.3f' % x)
 
 # Database Path
-db_path = '../data/stocks.db'
+# db_path = '../data/stocks.db' 
+db_path = "stocks.db"# modified to this for adding arima data
+
 
 # Load Data
 df = sql3.db_fetch_as_frame(db_path=db_path, query='select * from tsx_data')
@@ -27,8 +35,10 @@ forecast_df = sql3.db_fetch_as_frame(db_path=db_path, query='select * from forec
 all_ticks = df['Tick'].unique().tolist()
 forecasted_ticks = forecast_df['Tick'].unique().tolist()
 pending = list(set(all_ticks) - set(forecasted_ticks))
-data = df[df['Tick'].isin(pending)]
 
+# ------///removing filter for arima
+# data = df[df['Tick'].isin(pending)]
+data = df
 
 # Function to Prepare Data
 def prepare_data(company_symbol):
@@ -75,16 +85,17 @@ def forecast_lstm(train, test):
 
 
 # ARIMA Forecasting
-def forecast_arima(company_data):
-    series = TimeSeries.from_dataframe(company_data, 'Date', 'Close')
-    train, test = series.split_after(0.9)  # 90% train, 10% test
+def forecast_arima(train, test):
+    # Prepare data for ARIMA
+    train_data = train[1]  # Use closing prices for training
 
-    model = ARIMA(p=5, d=1, q=2)  # You can fine-tune p, d, q
-    model.fit(train)
+    # Fit ARIMA model
+    model = ARIMA(train_data, order=(5, 1, 2))
+    results = model.fit()
 
-    forecast = model.predict(len(test))
-    return forecast.values(), test.time_index
-
+    # Generate forecast
+    forecast = results.forecast(steps=len(test[1]))
+    return forecast
 
 # Function to Plot Forecasts
 def plot_forecasts(company_name, actual, xgb_forecast, lstm_forecast, arima_forecast, test_index):
@@ -107,43 +118,83 @@ forecast_results = pd.DataFrame()
 
 companies = data['Tick'].unique()
 
-for company in companies: 
-    (X_train, X_test, y_train, y_test), full_data = prepare_data(company)
 
-    # XGBoost Forecast
-    xgb_forecast = forecast_xgb((X_train, y_train), (X_test, y_test))
-    xgb_mape = mean_absolute_percentage_error(y_test.values, xgb_forecast)
+for company in companies:
+    try:
+        # Get train-test split data
+        (X_train, X_test, y_train, y_test), full_data = prepare_data(company)
 
-    # LSTM Forecast
-    lstm_forecast = forecast_lstm((X_train, y_train), (X_test, y_test))
-    lstm_mape = mean_absolute_percentage_error(y_test.values, lstm_forecast)
+        # Get test dates for all forecasts
+        test_index = y_test.index
 
-    # ARIMA Forecast
-    arima_forecast, test_index = forecast_arima(full_data)
-    arima_mape = mean_absolute_percentage_error(y_test.values, arima_forecast)
+        # Generate forecasts
+        xgb_forecast = forecast_xgb((X_train, y_train), (X_test, y_test))
+        lstm_forecast = forecast_lstm((X_train, y_train), (X_test, y_test))
+        arima_forecast = forecast_arima((X_train, y_train), (X_test, y_test))
 
-    print(f"{company} - XGB MAPE: {xgb_mape:.2f}%, LSTM MAPE: {lstm_mape:.2f}%, ARIMA MAPE: {arima_mape:.2f}%")
+        # Calculate MAPE for each model
+        xgb_mape = mean_absolute_percentage_error(y_test.values, xgb_forecast)
+        lstm_mape = mean_absolute_percentage_error(y_test.values, lstm_forecast)
+        arima_mape = mean_absolute_percentage_error(y_test.values, arima_forecast)
 
-    temp_df = pd.DataFrame({
-        'Tick': company,
-        'Date': test_index,
-        'Actual': y_test.values,
-        'XGB_Forecast': xgb_forecast,
-        'LSTM_Forecast': lstm_forecast,
-        'ARIMA_Forecast': arima_forecast
-    })
-    forecast_results = pd.concat([forecast_results, temp_df], ignore_index=True)
+        print(
+            f"{company} - XGB MAPE: {xgb_mape:.2f}%, LSTM MAPE: {lstm_mape:.2f}%, ARIMA MAPE: {arima_mape:.2f}%"
+        )
 
-    plot_forecasts(
-        company,
-        y_test.values, 
-        xgb_forecast,
-        lstm_forecast,
-        arima_forecast,
-        test_index  
-    )
+        # Create results DataFrame
+        temp_df = pd.DataFrame(
+            {
+                "Tick": company,
+                "Date": test_index,
+                "Actual": y_test.values,
+                "XGB_Forecast": xgb_forecast,
+                "LSTM_Forecast": lstm_forecast,
+                "ARIMA_Forecast": arima_forecast,
+            }
+        )
+        forecast_results = pd.concat([forecast_results, temp_df], ignore_index=True)
 
-forecast_results['Date'] = forecast_results['Date'].astype('str')
+        # Plot results
+        plot_forecasts(
+            company,
+            y_test.values,
+            xgb_forecast,
+            lstm_forecast,
+            arima_forecast,
+            test_index,
+        )
+
+    except Exception as e:
+        print(f"Error processing {company}: {str(e)}")
+        continue
+
+
+# forecast_results.to_csv('forecast_results_temp1.csv', index=False)
+forecast_results.head()
+
+# forecast_results = pd.read_csv('forecast_results_temp1.csv')
+
 
 # Store results in database
-sql3.db_upsert(df=forecast_results, db_path=db_path, table_name='forecast_results', primary_keys=['Tick', 'Date'])
+forecast_results["Date"] = forecast_results["Date"].astype("str")
+forecast_results["ARIMA_Forecast"] = forecast_results["ARIMA_Forecast"].astype(float)
+
+
+# Add ARIMA_Forecast column to forecast_results table
+# sql3.execute_query(
+#     db_path=db_path,
+#     query="""
+#     ALTER TABLE forecast_results 
+#     ADD COLUMN ARIMA_Forecast REAL;
+#     """,
+# )
+
+# Update the table with ARIMA forecast values
+sql3.db_upsert(
+    df=forecast_results,
+    db_path=db_path,
+    table_name="forecast_results",
+    primary_keys=["Tick", "Date"],
+)
+
+# sql3.db_upsert(df=forecast_results, db_path=db_path, table_name='forecast_results', primary_keys=['Tick', 'Date'])
